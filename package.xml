@@ -16,9 +16,8 @@
   <depend>tf2</depend>
   <depend>tf2_geometry_msgs</depend>
   <depend>tf2_ros</depend>
-  <depend>pcl_conversions</depend>
-  <depend>pcl_msgs</depend>
   <depend>fog_msgs</depend>
+  <depend>sensor_msgs</depend>
 
   <exec_depend>launch_ros</exec_depend>  
 
