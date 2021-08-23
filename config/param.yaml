@@ -2,7 +2,6 @@
 median_filter_size: 10
 # how often data from sensors are evaluated and the bumper topic published
 update_rate: 10
-
 # number of sectors
 n_horizontal_sectors: 8
 

@@ -18,7 +18,7 @@
 #include <thread>
 #include <atomic>
 #include <mutex>
-#include <iomanip> 
+#include <iomanip>
 
 //}
 
@@ -50,7 +50,7 @@ private:
   std::string m_frame_id;
   int         m_median_filter_size;
 
-  double m_lidar2d_filter_size;
+  int m_lidar2d_filter_size;
 
   //}
 
@@ -148,7 +148,7 @@ Bumper::Bumper(rclcpp::NodeOptions options) : Node("Bumper", options) {
   RCLCPP_INFO(this->get_logger(), "[%s]: -------------- Loading parameters --------------", this->get_name());
 
   int n_horizontal_sectors;
-  double update_rate;
+  int update_rate;
 
   /* parse params from config file //{ */
   bool loaded_successfully = true;
@@ -156,7 +156,7 @@ Bumper::Bumper(rclcpp::NodeOptions options) : Node("Bumper", options) {
   loaded_successfully &= parse_param("update_rate", update_rate);
   loaded_successfully &= parse_param("frame_id", m_frame_id);
   loaded_successfully &= parse_param("median_filter_size", m_median_filter_size);
-  loaded_successfully &= parse_param("lidar2d/filter_size", m_lidar2d_filter_size);
+  loaded_successfully &= parse_param("lidar2d.filter_size", m_lidar2d_filter_size);
   loaded_successfully &= parse_param("n_horizontal_sectors", n_horizontal_sectors);
 
   if (!loaded_successfully) {
@@ -208,7 +208,7 @@ Bumper::Bumper(rclcpp::NodeOptions options) : Node("Bumper", options) {
 void Bumper::lidar2d_callback(const sensor_msgs::msg::LaserScan::UniquePtr msg) {
   std::scoped_lock lock(m_mutex);
   RCLCPP_INFO_ONCE(this->get_logger(), "[%s]: Getting lidar2d msgs...", this->get_name());
-  m_lidar2d_msg = std::unique_ptr<sensor_msgs::msg::LaserScan>{ new sensor_msgs::msg::LaserScan{ *msg } };
+  m_lidar2d_msg = std::unique_ptr<sensor_msgs::msg::LaserScan>{new sensor_msgs::msg::LaserScan{*msg}};
 }
 //}
 
@@ -216,7 +216,7 @@ void Bumper::lidar2d_callback(const sensor_msgs::msg::LaserScan::UniquePtr msg) 
 void Bumper::lidar1d_down_callback(const sensor_msgs::msg::Range::UniquePtr msg) {
   std::scoped_lock lock(m_mutex);
   RCLCPP_INFO_ONCE(this->get_logger(), "[%s]: Getting lidar1d_down msgs...", this->get_name());
-  m_lidar1d_down_msg = std::unique_ptr<sensor_msgs::msg::Range>{ new sensor_msgs::msg::Range{ *msg } };
+  m_lidar1d_down_msg = std::unique_ptr<sensor_msgs::msg::Range>{new sensor_msgs::msg::Range{*msg}};
 }
 //}
 
@@ -255,7 +255,7 @@ void Bumper::main_loop() {
       initialize_lidar2d_offset(lidar2d_msg);
 
       if (m_lidar2d_offset_initialized) {
-        RCLCPP_INFO(this->get_logger(),"[Bumper]: 2D lidar horizontal angle offset: %.2f", m_lidar2d_offset);
+        RCLCPP_INFO(this->get_logger(), "[Bumper]: 2D lidar horizontal angle offset: %.2f", m_lidar2d_offset);
       } else {
         RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000, "[Bumper]: 2D lidar horizontal angle offset initialization failed, will retry.");
       }
@@ -354,9 +354,14 @@ void Bumper::main_loop() {
           }
         }
         std::stringstream ss;
-        for (size_t it = 0; it < used_sensors.size(); it++)
+        for (size_t it = 0; it < used_sensors.size(); it++) {
           ss << std::endl << "\t[" << used_sensors.at(it) << "] at topic \"" << sensors_topics.at(it) << "\"";
-        RCLCPP_INFO_STREAM_THROTTLE(this->get_logger(), *this->get_clock(), 2000, "[Bumper]: Updating bumper using sensors:" << ss.str());
+        }
+        if (ss.tellp() != std::streampos(0)) {
+          RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 2000, "[Bumper]: Updating bumper using sensors: %s", ss.str().c_str());
+        } else {
+          RCLCPP_WARN_STREAM_THROTTLE(this->get_logger(), *this->get_clock(), 2000, "[Bumper]: No new data");
+        }
       }
 
       //}
@@ -493,7 +498,7 @@ void Bumper::initialize_lidar2d_offset(const sensor_msgs::msg::LaserScan& lidar2
   geometry_msgs::msg::Vector3Stamped x_fcu;
 
   try {
-    x_fcu      = m_tf_buffer->transform(x_lidar, m_frame_id);
+    x_fcu = m_tf_buffer->transform(x_lidar, m_frame_id);
   }
   catch (...) {
     return;
@@ -548,7 +553,7 @@ std::vector<T> Bumper::filter_sectors(const std::vector<T>& sectors) {
     fil.push_back(sec);
     const auto median = get_median(fil);
     if (std::isinf(median)) {
-      RCLCPP_WARN(this->get_logger(),"[Bumper]: median is inf...");
+      RCLCPP_WARN(this->get_logger(), "[Bumper]: median is inf...");
     }
     ret.push_back(median);
 #ifdef DEBUG_MEDIAN_FILTER
