@@ -168,7 +168,7 @@ Bumper::Bumper(rclcpp::NodeOptions options) : Node("Bumper", options) {
 
   //}
 
-  initialize_sectors(n_horizontal_sectors, 0);
+  initialize_sectors(n_horizontal_sectors, 0.00872665); // 0.5 degree
 
   m_lidar2d_offset_initialized = false;
   m_lidar2d_msg.reset();
