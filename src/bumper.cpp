@@ -181,7 +181,7 @@ Bumper::Bumper(rclcpp::NodeOptions options) : Node("Bumper", options) {
       this->create_subscription<sensor_msgs::msg::Range>("lidar1d_down_in", rclcpp::SystemDefaultsQoS(), std::bind(&Bumper::lidar1d_down_callback, this, _1));
 
   // Initialize publishers
-  m_obstacles_pub = this->create_publisher<ObstacleSectors>("obstacle_sectors", 10);
+  m_obstacles_pub = this->create_publisher<ObstacleSectors>("obstacle_sectors_out", 10);
 
   /* initialize tf_listener //{ */
 
@@ -591,4 +591,3 @@ template bool Bumper::parse_param<unsigned int>(const std::string& param_name, u
 
 #include <rclcpp_components/register_node_macro.hpp>
 RCLCPP_COMPONENTS_REGISTER_NODE(fog_bumper::Bumper)
-

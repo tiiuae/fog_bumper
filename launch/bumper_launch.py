@@ -45,7 +45,7 @@ def generate_launch_description():
                     ("lidar1d_down_in", "/" + DRONE_DEVICE_ID + "/garmin/range"),
                     ("lidar2d_in", "/" + DRONE_DEVICE_ID + "/rplidar/scan"),
                     # publishers
-                    ("obstacle_sectors_out", "/" + DRONE_DEVICE_ID + "/obstacle_sectors"),
+                    ("obstacle_sectors_out", "~/obstacle_sectors"),
                 ],
                 parameters=[
                     pkg_share_path + '/config/param.yaml',
