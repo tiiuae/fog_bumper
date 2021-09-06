@@ -3,6 +3,7 @@
 // clang: MatousFormat
 #include <chrono>
 #include <rclcpp/rclcpp.hpp>
+#include <rclcpp/timer.hpp>
 
 #include <sensor_msgs/msg/laser_scan.hpp>
 #include <sensor_msgs/msg/range.hpp>
@@ -58,12 +59,13 @@ private:
   rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr m_lidar2d_sub;
   rclcpp::Subscription<sensor_msgs::msg::Range>::SharedPtr     m_lidar1d_down_sub;
 
+  rclcpp::CallbackGroup::SharedPtr m_callback_group;
+  rclcpp::TimerBase::SharedPtr     m_main_timer;
+
   std::shared_ptr<tf2_ros::Buffer>            m_tf_buffer;
   std::shared_ptr<tf2_ros::TransformListener> m_tf_listener_ptr;
 
   rclcpp::Publisher<ObstacleSectors>::SharedPtr m_obstacles_pub;
-
-  std::shared_ptr<rclcpp::Rate> m_update_rate;
 
   std::unique_ptr<sensor_msgs::msg::LaserScan> m_lidar2d_msg;
   std::unique_ptr<sensor_msgs::msg::Range>     m_lidar1d_down_msg;
@@ -89,9 +91,6 @@ private:
   bool   m_lidar2d_offset_initialized;
   double m_lidar2d_offset;
 
-  // threads if timers do not work
-  std::thread m_main_thread;
-
   std::mutex m_mutex;
   //}
 
@@ -114,7 +113,7 @@ private:
   // |                       Helper methods                       |
   // --------------------------------------------------------------
 
-  void main_loop(void);
+  void main_routine(void);
 
   void initialize_sectors(int n_horizontal_sectors, double vfov);
 
@@ -174,11 +173,15 @@ Bumper::Bumper(rclcpp::NodeOptions options) : Node("Bumper", options) {
   m_lidar2d_msg.reset();
   m_lidar1d_down_msg.reset();
 
+  m_callback_group = this->create_callback_group(rclcpp::callback_group::CallbackGroupType::Reentrant);
+  auto sub_opt = rclcpp::SubscriptionOptions();
+  sub_opt.callback_group = m_callback_group;
+
   // Initialize subscribers
   m_lidar2d_sub =
-      this->create_subscription<sensor_msgs::msg::LaserScan>("lidar2d_in", rclcpp::SystemDefaultsQoS(), std::bind(&Bumper::lidar2d_callback, this, _1));
+      this->create_subscription<sensor_msgs::msg::LaserScan>("lidar2d_in", rclcpp::SystemDefaultsQoS(), std::bind(&Bumper::lidar2d_callback, this, _1), sub_opt);
   m_lidar1d_down_sub =
-      this->create_subscription<sensor_msgs::msg::Range>("lidar1d_down_in", rclcpp::SystemDefaultsQoS(), std::bind(&Bumper::lidar1d_down_callback, this, _1));
+      this->create_subscription<sensor_msgs::msg::Range>("lidar1d_down_in", rclcpp::SystemDefaultsQoS(), std::bind(&Bumper::lidar1d_down_callback, this, _1), sub_opt);
 
   // Initialize publishers
   m_obstacles_pub = this->create_publisher<ObstacleSectors>("obstacle_sectors_out", 10);
@@ -191,10 +194,7 @@ Bumper::Bumper(rclcpp::NodeOptions options) : Node("Bumper", options) {
 
   //}
 
-  m_update_rate = std::make_shared<rclcpp::Rate>(update_rate);
-
-  m_main_thread = std::thread(&Bumper::main_loop, this);
-  m_main_thread.detach();
+  m_main_timer = this->create_wall_timer(std::chrono::duration<double>(1.0 / update_rate), std::bind(&Bumper::main_routine, this), m_callback_group);
 
   std::cout << "----------------------------------------------------------" << std::endl;
 }
@@ -225,148 +225,148 @@ void Bumper::lidar1d_down_callback(const sensor_msgs::msg::Range::UniquePtr msg)
 // |                          Main loop                         |
 // --------------------------------------------------------------
 
-/* main_loop() method //{ */
-void Bumper::main_loop() {
-  while (rclcpp::ok()) {
-    bool                        has_lidar2d_new_msg      = false;
-    bool                        has_lidar1d_down_new_msg = false;
-    sensor_msgs::msg::LaserScan lidar2d_msg;
-    sensor_msgs::msg::Range     lidar1d_down_msg;
+/* main_routine //{ */
+void Bumper::main_routine() {
+  static rclcpp::Time last_processed_msg = this->get_clock()->now();
 
-    {
-      std::scoped_lock lock(m_mutex);
-      if (m_lidar2d_msg != nullptr) {
-        has_lidar2d_new_msg = true;
-        lidar2d_msg         = *m_lidar2d_msg;
-        m_lidar2d_msg.reset();
-      }
+  bool                        has_lidar2d_new_msg      = false;
+  bool                        has_lidar1d_down_new_msg = false;
+  sensor_msgs::msg::LaserScan lidar2d_msg;
+  sensor_msgs::msg::Range     lidar1d_down_msg;
 
-      if (m_lidar1d_down_msg != nullptr) {
-        has_lidar1d_down_new_msg = true;
-        lidar1d_down_msg         = *m_lidar1d_down_msg;
-        m_lidar1d_down_msg.reset();
+  {
+    std::scoped_lock lock(m_mutex);
+    if (m_lidar2d_msg != nullptr) {
+      has_lidar2d_new_msg = true;
+      lidar2d_msg         = *m_lidar2d_msg;
+      m_lidar2d_msg.reset();
+    }
+
+    if (m_lidar1d_down_msg != nullptr) {
+      has_lidar1d_down_new_msg = true;
+      lidar1d_down_msg         = *m_lidar1d_down_msg;
+      m_lidar1d_down_msg.reset();
+    }
+  }
+
+  /* Initialize horizontal angle offset of 2D lidar from a new message //{ */
+  if (!m_lidar2d_offset_initialized && has_lidar2d_new_msg) {
+    RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000, "[Bumper]: Initializing 2D lidar horizontal angle offset");
+
+    initialize_lidar2d_offset(lidar2d_msg);
+
+    if (m_lidar2d_offset_initialized) {
+      RCLCPP_INFO(this->get_logger(), "[Bumper]: 2D lidar horizontal angle offset: %.2f", m_lidar2d_offset);
+    } else {
+      RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000, "[Bumper]: 2D lidar horizontal angle offset initialization failed, will retry.");
+    }
+  }
+  //}
+
+  if (m_sectors_initialized) {
+    std::vector<std::tuple<int, std::vector<double>, rclcpp::Time>> sensors_sectors;
+    std::vector<std::string>                                        sensors_topics;
+
+    /* process any new messages from sensors //{ */
+
+    // Check data from the horizontal 2D lidar
+    if (m_lidar2d_offset_initialized && has_lidar2d_new_msg) {
+      std::vector<double> obstacle_sectors = find_obstacles_lidar2d(lidar2d_msg);
+      sensors_sectors.push_back({ObstacleSectors::SENSOR_LIDAR2D, obstacle_sectors, lidar2d_msg.header.stamp});
+      sensors_topics.push_back(m_lidar2d_sub->get_topic_name());
+    }
+
+    // Check data from the down-facing lidar
+    if (has_lidar1d_down_new_msg) {
+      std::vector<double> obstacle_sectors = find_obstacles_lidar1d(lidar1d_down_msg, m_bottom_sector_idx);
+      sensors_sectors.push_back({ObstacleSectors::SENSOR_LIDAR1D, obstacle_sectors, lidar1d_down_msg.header.stamp});
+      sensors_topics.push_back(m_lidar1d_down_sub->get_topic_name());
+    }
+
+    //}
+
+    std::vector<double> res_obstacles(m_n_total_sectors, ObstacleSectors::OBSTACLE_NO_DATA);
+    std::vector<int8_t> res_sensors(m_n_total_sectors, ObstacleSectors::SENSOR_NONE);
+    rclcpp::Time        res_stamp = this->get_clock()->now();
+
+    /* put the resuls from different sensors together //{ */
+
+    for (const auto& sensor_sectors : sensors_sectors) {
+      const auto [sensor, sectors, stamp] = sensor_sectors;
+      for (size_t sect_it = 0; sect_it < m_n_total_sectors; sect_it++) {
+        const auto obstacle_dist = sectors.at(sect_it);
+        // check if an obstacle was detected (*obstacle_sure*)
+        const auto obstacle_unknown = obstacle_dist == ObstacleSectors::OBSTACLE_NO_DATA;
+        auto&      cur_value        = res_obstacles.at(sect_it);
+        auto       cur_unknown      = cur_value == ObstacleSectors::OBSTACLE_NO_DATA;
+        auto&      cur_sensor       = res_sensors.at(sect_it);
+        // If the previous obstacle information in this sector is unknown or a closer
+        // obstacle was detected by this sensor, update the information.
+        if (!obstacle_unknown && (cur_value > obstacle_dist || cur_unknown)) {
+          cur_value  = obstacle_dist;
+          cur_sensor = sensor;
+          if (res_stamp > stamp) {
+            res_stamp = stamp;
+          }
+        }
       }
     }
 
-    /* Initialize horizontal angle offset of 2D lidar from a new message //{ */
-    if (!m_lidar2d_offset_initialized && has_lidar2d_new_msg) {
-      RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000, "[Bumper]: Initializing 2D lidar horizontal angle offset");
+    //}
 
-      initialize_lidar2d_offset(lidar2d_msg);
+    // filter the obstacles using a median filter
+    res_obstacles = filter_sectors(res_obstacles);
 
-      if (m_lidar2d_offset_initialized) {
-        RCLCPP_INFO(this->get_logger(), "[Bumper]: 2D lidar horizontal angle offset: %.2f", m_lidar2d_offset);
-      } else {
-        RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000, "[Bumper]: 2D lidar horizontal angle offset initialization failed, will retry.");
-      }
+    /* Prepare and publish the ObstacleSectors message to be published //{ */
+    {
+      ObstacleSectors obst_msg;
+      obst_msg.header.frame_id      = m_frame_id;
+      obst_msg.header.stamp         = res_stamp;
+      obst_msg.n_horizontal_sectors = m_n_horizontal_sectors;
+      obst_msg.sectors_vertical_fov = m_vertical_fov;
+      obst_msg.sectors              = res_obstacles;
+      obst_msg.sector_sensors       = res_sensors;
+      m_obstacles_pub->publish(obst_msg);
     }
     //}
 
-    if (m_sectors_initialized) {
-      std::vector<std::tuple<int, std::vector<double>, rclcpp::Time>> sensors_sectors;
-      std::vector<std::string>                                        sensors_topics;
+    /* print out some info to the console //{ */
 
-      /* process any new messages from sensors //{ */
-
-      // Check data from the horizontal 2D lidar
-      if (m_lidar2d_offset_initialized && has_lidar2d_new_msg) {
-        std::vector<double> obstacle_sectors = find_obstacles_lidar2d(lidar2d_msg);
-        sensors_sectors.push_back({ObstacleSectors::SENSOR_LIDAR2D, obstacle_sectors, lidar2d_msg.header.stamp});
-        sensors_topics.push_back(m_lidar2d_sub->get_topic_name());
-      }
-
-      // Check data from the down-facing lidar
-      if (has_lidar1d_down_new_msg) {
-        std::vector<double> obstacle_sectors = find_obstacles_lidar1d(lidar1d_down_msg, m_bottom_sector_idx);
-        sensors_sectors.push_back({ObstacleSectors::SENSOR_LIDAR1D, obstacle_sectors, lidar1d_down_msg.header.stamp});
-        sensors_topics.push_back(m_lidar1d_down_sub->get_topic_name());
-      }
-
-      //}
-
-      std::vector<double> res_obstacles(m_n_total_sectors, ObstacleSectors::OBSTACLE_NO_DATA);
-      std::vector<int8_t> res_sensors(m_n_total_sectors, ObstacleSectors::SENSOR_NONE);
-      rclcpp::Time        res_stamp = this->get_clock()->now();
-
-      /* put the resuls from different sensors together //{ */
-
-      for (const auto& sensor_sectors : sensors_sectors) {
-        const auto [sensor, sectors, stamp] = sensor_sectors;
-        for (size_t sect_it = 0; sect_it < m_n_total_sectors; sect_it++) {
-          const auto obstacle_dist = sectors.at(sect_it);
-          // check if an obstacle was detected (*obstacle_sure*)
-          const auto obstacle_unknown = obstacle_dist == ObstacleSectors::OBSTACLE_NO_DATA;
-          auto&      cur_value        = res_obstacles.at(sect_it);
-          auto       cur_unknown      = cur_value == ObstacleSectors::OBSTACLE_NO_DATA;
-          auto&      cur_sensor       = res_sensors.at(sect_it);
-          // If the previous obstacle information in this sector is unknown or a closer
-          // obstacle was detected by this sensor, update the information.
-          if (!obstacle_unknown && (cur_value > obstacle_dist || cur_unknown)) {
-            cur_value  = obstacle_dist;
-            cur_sensor = sensor;
-            if (res_stamp > stamp) {
-              res_stamp = stamp;
-            }
-          }
+    {
+      std::vector<std::string> used_sensors;
+      for (const auto& el : sensors_sectors) {
+        const auto sensor = std::get<0>(el);
+        switch (sensor) {
+          case ObstacleSectors::SENSOR_NONE:
+            used_sensors.push_back("\033[1;31minvalid \033[0m");
+            break;
+          case ObstacleSectors::SENSOR_DEPTH:
+            used_sensors.push_back("depthmap");
+            break;
+          case ObstacleSectors::SENSOR_LIDAR1D:
+            used_sensors.push_back("LiDAR 1D");
+            break;
+          case ObstacleSectors::SENSOR_LIDAR2D:
+            used_sensors.push_back("LiDAR 2D");
+            break;
+          case ObstacleSectors::SENSOR_LIDAR3D:
+            used_sensors.push_back("LiDAR 3D");
+            break;
         }
       }
-
-      //}
-
-      // filter the obstacles using a median filter
-      res_obstacles = filter_sectors(res_obstacles);
-
-      /* Prepare and publish the ObstacleSectors message to be published //{ */
-      {
-        ObstacleSectors obst_msg;
-        obst_msg.header.frame_id      = m_frame_id;
-        obst_msg.header.stamp         = res_stamp;
-        obst_msg.n_horizontal_sectors = m_n_horizontal_sectors;
-        obst_msg.sectors_vertical_fov = m_vertical_fov;
-        obst_msg.sectors              = res_obstacles;
-        obst_msg.sector_sensors       = res_sensors;
-        m_obstacles_pub->publish(obst_msg);
+      std::stringstream ss;
+      for (size_t it = 0; it < used_sensors.size(); it++) {
+        ss << std::endl << "\t[" << used_sensors.at(it) << "] at topic \"" << sensors_topics.at(it) << "\"";
       }
-      //}
-
-      /* print out some info to the console //{ */
-
-      {
-        std::vector<std::string> used_sensors;
-        for (const auto& el : sensors_sectors) {
-          const auto sensor = std::get<0>(el);
-          switch (sensor) {
-            case ObstacleSectors::SENSOR_NONE:
-              used_sensors.push_back("\033[1;31minvalid \033[0m");
-              break;
-            case ObstacleSectors::SENSOR_DEPTH:
-              used_sensors.push_back("depthmap");
-              break;
-            case ObstacleSectors::SENSOR_LIDAR1D:
-              used_sensors.push_back("LiDAR 1D");
-              break;
-            case ObstacleSectors::SENSOR_LIDAR2D:
-              used_sensors.push_back("LiDAR 2D");
-              break;
-            case ObstacleSectors::SENSOR_LIDAR3D:
-              used_sensors.push_back("LiDAR 3D");
-              break;
-          }
-        }
-        std::stringstream ss;
-        for (size_t it = 0; it < used_sensors.size(); it++) {
-          ss << std::endl << "\t[" << used_sensors.at(it) << "] at topic \"" << sensors_topics.at(it) << "\"";
-        }
-        if (ss.tellp() != std::streampos(0)) {
-          RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 2000, "[Bumper]: Updating bumper using sensors: %s", ss.str().c_str());
-        } else {
-          RCLCPP_WARN_STREAM_THROTTLE(this->get_logger(), *this->get_clock(), 2000, "[Bumper]: No new data");
-        }
+      if (!used_sensors.empty()) {
+        RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 2000, "[Bumper]: Updating bumper using sensors: %s", ss.str().c_str());
+        last_processed_msg = res_stamp;
+      } else if ((this->get_clock()->now() - last_processed_msg).nanoseconds() / 1e9 >= 2.0){
+        RCLCPP_WARN_STREAM_THROTTLE(this->get_logger(), *this->get_clock(), 2000, "[Bumper]: No new data");
       }
-
-      //}
     }
-    m_update_rate->sleep();
+
+    //}
   }
 }
 //}
