@@ -1,0 +1,3 @@
+fog_msgs:
+    ubuntu: ros-foxy-fog-msgs
+

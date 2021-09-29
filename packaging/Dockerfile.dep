@@ -1,0 +1,7 @@
+# Install build dependencies
+RUN apt-get update -y && apt-get install -y --no-install-recommends \
+    libboost-dev \
+    ros-foxy-fog-msgs \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV ROS=1
