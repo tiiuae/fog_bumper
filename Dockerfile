@@ -5,26 +5,12 @@ ARG BUILD_NUMBER
 ARG COMMIT_ID
 ARG GIT_VER
 
-# workaround for ROS GPG Key Expiration Incident
-RUN rm /etc/apt/sources.list.d/ros2-latest.list && \
-    apt-get update && \
-    apt-get install -y curl && \
-    curl http://repo.ros2.org/repos.key | sudo apt-key add - && \
-    echo "deb http://packages.ros.org/ros2/ubuntu focal main" > /etc/apt/sources.list.d/ros2-latest.list && \
-    apt-get update
-
-RUN echo "deb [trusted=yes] https://artifactory.ssrc.fi/artifactory/debian-public-local focal fog-sw" >> /etc/apt/sources.list
-
 # Install build dependencies
 RUN apt-get update -y && apt-get install -y --no-install-recommends \
     curl \
-    build-essential \
-    dh-make \
-    debhelper \
-    cmake \
-    git-core \
-    fakeroot \
     python3-bloom \
+    fakeroot \
+    dh-make \
     libboost-dev \
     && rm -rf /var/lib/apt/lists/*
 
@@ -39,4 +25,4 @@ RUN params="-m $(realpath .) " \
     && ./packaging/common/package.sh $params
 
 FROM scratch
-COPY --from=fog-sw-builder /ros-foxy-fog-bumper_*.deb /packages/
+COPY --from=fog-sw-builder /ros-*-fog-bumper_*.deb /packages/
