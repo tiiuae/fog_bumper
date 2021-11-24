@@ -128,7 +128,12 @@ $(printf '%*s' "${#title}" | tr ' ' "-")
 * commit: ${git_commit_hash}
 EOF_CHANGELOG
 
-source ${mod_dir}/deps_ws/install/setup.bash
+if [ -e ${mod_dir}/ros2_ws ]; then
+	# From fog-sw repo.
+	source ${mod_dir}/ros2_ws/install/setup.bash
+else
+	source ${mod_dir}/deps_ws/install/setup.bash
+fi
 
 bloom-generate rosdebian --os-name ubuntu --os-version focal --ros-distro ${ROS_DISTRO} --place-template-files \
     && sed -i "s/@(DebianInc)@(Distribution)/@(DebianInc)/" debian/changelog.em \

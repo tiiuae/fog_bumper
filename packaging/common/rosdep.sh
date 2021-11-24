@@ -26,12 +26,17 @@ fi
 
 echo "--- Updating rosdep"
 rosdep update
-
-mkdir -p ${mod_dir}/deps_ws/src
-pushd ${mod_dir}/deps_ws
-vcs import src < ${mod_dir}/underlay.repos
-rosdep install --from-paths src --ignore-src -r -y --rosdistro ${ROS_DISTRO}
-source /opt/ros/${ROS_DISTRO}/setup.bash
+# Dependencies from fog-sw repo
+if [ -e ${mod_dir}/ros2_ws/src ]; then
+    pushd ${mod_dir}/ros2_ws
+    source /opt/ros/${ROS_DISTRO}/setup.bash
+else
+    mkdir -p ${mod_dir}/deps_ws/src
+    pushd ${mod_dir}/deps_ws
+    vcs import src < ${mod_dir}/underlay.repos
+    rosdep install --from-paths src --ignore-src -r -y --rosdistro ${ROS_DISTRO}
+    source /opt/ros/${ROS_DISTRO}/setup.bash
+fi
 colcon build --packages-select fog_msgs
 popd
 
