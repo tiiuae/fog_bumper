@@ -16,19 +16,13 @@ jobs:
         with:
           path: fog_bumper
 
-      - name: Checkout ci-scripts
-        uses: actions/checkout@v2
-        with:
-          repository: tiiuae/fogsw-ci-scripts
-          path: fogsw-ci-scripts
-
       # Run docker build
       - name: Run fog_bumper docker build
         run: |
           set -eux
           mkdir bin
-          pushd fogsw-ci-scripts
-          ./generate_deb.sh ../fog_bumper ../bin/
+          pushd fog_bumper
+          ./build.sh ../bin/
           popd
 
       - name: Install jfrog CLI tool
