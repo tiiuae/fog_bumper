@@ -11,7 +11,6 @@ Params:
     -m  Module directory to generate deb package from (MANDATORY).
     -b  Build number. This will be tha last digit of version string (x.x.N).
     -d  Distribution string in debian changelog.
-    -a  Target architecture the module is built for. e.g. amd64, arm64.
     -c  Commit id of the git repository HEAD
     -s  Subdirectory to be packaging
     -g  Git version string
@@ -36,14 +35,11 @@ error_arg() {
 mod_dir=""
 build_nbr=0
 distr=""
-arch=""
 version=""
 git_commit_hash=""
 git_version_string=""
-packaging_subdir=""
-package_version=""
 
-while getopts "hm:b:d:a:c:g:s:v:" opt
+while getopts "hm:b:d:c:g:v:" opt
 do
 	case $opt in
 		h)
@@ -58,20 +54,11 @@ do
 		d)
 			check_arg $OPTARG && distr=$OPTARG || error_arg $opt
 			;;
-		a)
-			check_arg $OPTARG && arch=$OPTARG || error_arg $opt
-			;;
 		c)
 			check_arg $OPTARG && git_commit_hash=$OPTARG || error_arg $opt
 			;;
 		g)
 			check_arg $OPTARG && git_version_string=$OPTARG || error_arg $opt
-			;;
-		s)
-			check_arg $OPTARG && packaging_subdir=$OPTARG || error_arg $opt
-			;;
-		v)
-			check_arg $OPTARG && package_version=$OPTARG || error_arg $opt
 			;;
 		\?)
 			usage
@@ -89,37 +76,39 @@ fi
 
 ## Debug prints
 echo 
-echo "mod_dir: $mod_dir"
-echo "build_nbr: $build_nbr"
-echo "distr: $distr"
-echo "arch: $arch"
-echo "git_commit_hash: $git_commit_hash"
-echo "git_version_string: $git_version_string"
-echo "packaging_subdir: $packaging_subdir"
-echo "package_version: $package_version"
+echo "[INFO] mod_dir: ${mod_dir}."
+echo "[INFO] build_nbr: ${build_nbr}."
+echo "[INFO] distr: ${distr}."
+echo "[INFO] git_commit_hash: ${git_commit_hash}."
+echo "[INFO] git_version_string: ${git_version_string}."
 
 script_dir=$(realpath $(dirname "$0"))
 
-if [ "$packaging_subdir" != "" ]; then
-	cd $mod_dir/$packaging_subdir
-else
-	cd $mod_dir
-fi
-
-if [ "$package_version" == "" ]; then
-	package_version=1.0.0
-fi
+cd $mod_dir
 
 ## Generate package
-echo "Creating deb package..."
+echo "[INFO] Creating deb package..."
 ### ROS2 Packaging
 
 ### Create version string
 version=$(grep "<version>" package.xml | sed 's/[^>]*>\([^<"]*\).*/\1/')
 
-echo "version: ${version}"
+echo "[INFO] Version: ${version}."
 
-$script_dir/rosdep.sh $mod_dir
+echo "[INFO] Build package dependencies."
+# Dependencies from fog-sw repo
+if [ -e ${mod_dir}/ros2_ws/src ]; then
+    pushd ${mod_dir}/ros2_ws > /dev/null
+    source /opt/ros/${ROS_DISTRO}/setup.bash
+else
+    mkdir -p ${mod_dir}/deps_ws/src
+    pushd ${mod_dir}/deps_ws > /dev/null
+    vcs import src < ${mod_dir}/underlay.repos
+    rosdep install --from-paths src --ignore-src -r -y --rosdistro ${ROS_DISTRO}
+    source /opt/ros/${ROS_DISTRO}/setup.bash
+fi
+colcon build --packages-select fog_msgs
+popd > /dev/null
 
 title="$version ($(date +%Y-%m-%d))"
 cat << EOF_CHANGELOG > CHANGELOG.rst
@@ -143,7 +132,12 @@ bloom-generate rosdebian --os-name ubuntu --os-version focal --ros-distro ${ROS_
     && fakeroot debian/rules clean \
     && fakeroot debian/rules binary || exit 1
 
-rm -rf ${build_dir}
-echo "Done"
+echo "[INFO] Clean up."
+rm -rf deps_ws obj-x86_64-linux-gnu debian CHANGELOG.rst
+
+echo "[INFO] Move debian packages to volume."
+mv ${mod_dir}/../*.deb ${mod_dir}/../*.ddeb ${mod_dir}
+
+echo "[INFO] Done."
 
 exit 0
