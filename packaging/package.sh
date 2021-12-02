@@ -95,20 +95,7 @@ version=$(grep "<version>" package.xml | sed 's/[^>]*>\([^<"]*\).*/\1/')
 
 echo "[INFO] Version: ${version}."
 
-echo "[INFO] Build package dependencies."
-# Dependencies from fog-sw repo
-if [ -e ${mod_dir}/ros2_ws/src ]; then
-    pushd ${mod_dir}/ros2_ws > /dev/null
-    source /opt/ros/${ROS_DISTRO}/setup.bash
-else
-    mkdir -p ${mod_dir}/deps_ws/src
-    pushd ${mod_dir}/deps_ws > /dev/null
-    vcs import src < ${mod_dir}/underlay.repos
-    rosdep install --from-paths src --ignore-src -r -y --rosdistro ${ROS_DISTRO}
-    source /opt/ros/${ROS_DISTRO}/setup.bash
-fi
-colcon build --packages-select fog_msgs
-popd > /dev/null
+${mod_dir}/packaging/build_deps.sh ${mod_dir}
 
 title="$version ($(date +%Y-%m-%d))"
 cat << EOF_CHANGELOG > CHANGELOG.rst
