@@ -14,7 +14,9 @@ cat $yamlpath
 mkdir -p /etc/ros/rosdep/sources.list.d
 echo "yaml file://${yamlpath}" > /etc/ros/rosdep/sources.list.d/51-fogsw-module.list
 
-echo "[INFO] Updating rosdep"
-rosdep update
+if [ "$(id -u)" != "0" ]; then
+        echo "[INFO] Updating rosdep"
+        rosdep update
+fi
 
 exit 0
