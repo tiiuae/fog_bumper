@@ -18,7 +18,7 @@ docker run \
   --rm \
   -v $(pwd):/fog_bumper/sources \
   fog-bumper:latest \
-  ./packaging/common/package.sh \
+  ./packaging/package.sh \
   -m /fog_bumper/sources \
   -b ${build_number} \
   -c $(git rev-parse HEAD) \

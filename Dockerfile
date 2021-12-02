@@ -21,13 +21,12 @@ RUN groupadd -g $GID builder && \
     usermod -aG sudo builder && \
     echo 'builder ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 
-RUN mkdir -p /fog_bumper/packaging/common
+RUN mkdir -p /fog_bumper/packaging
 
-COPY packaging/rosdep.yaml /fog_bumper/packaging/
-COPY packaging/common/rosdep.sh /fog_bumper/packaging/common/
+COPY packaging/rosdep.yaml packaging/rosdep.sh /fog_bumper/packaging/
 COPY underlay.repos /fog_bumper/
 
-RUN /fog_bumper/packaging/common/rosdep.sh /fog_bumper
+RUN /fog_bumper/packaging/rosdep.sh /fog_bumper
 
 RUN chown -R builder:builder /fog_bumper
 
