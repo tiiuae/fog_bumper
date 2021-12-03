@@ -19,10 +19,7 @@ docker run \
   -v $(pwd):/fog_bumper/sources \
   fog-bumper:latest \
   ./packaging/package.sh \
-  -m /fog_bumper/sources \
-  -b ${build_number} \
-  -c $(git rev-parse HEAD) \
-  -g $(git log --date=format:%Y%m%d --pretty=~git%cd.%h -n 1)
+  -b ${build_number}
 
 mkdir -p ${output_dir}
 cp *.deb *.ddeb ${output_dir}

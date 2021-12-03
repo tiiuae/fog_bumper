@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -e
+set -eo pipefail
 
 mod_dir=${1}
 
@@ -21,5 +21,3 @@ fi
 echo "[INFO] Build package dependencies."
 colcon build --packages-select fog_msgs
 popd > /dev/null
-
-exit 0
