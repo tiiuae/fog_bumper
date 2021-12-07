@@ -570,7 +570,7 @@ std::vector<T> Bumper::filter_sectors(const std::vector<T>& sectors) {
 /* parse_param //{ */
 template <class T>
 bool Bumper::parse_param(const std::string& param_name, T& param_dest) {
-  this->declare_parameter(param_name);
+  this->declare_parameter<T>(param_name);
   if (!this->get_parameter(param_name, param_dest)) {
     RCLCPP_ERROR(this->get_logger(), "[%s]: Could not load param '%s'", this->get_name(), param_name.c_str());
     return false;
@@ -580,12 +580,6 @@ bool Bumper::parse_param(const std::string& param_name, T& param_dest) {
   return true;
 }
 
-template bool Bumper::parse_param<int>(const std::string& param_name, int& param_dest);
-template bool Bumper::parse_param<double>(const std::string& param_name, double& param_dest);
-template bool Bumper::parse_param<float>(const std::string& param_name, float& param_dest);
-template bool Bumper::parse_param<std::string>(const std::string& param_name, std::string& param_dest);
-template bool Bumper::parse_param<bool>(const std::string& param_name, bool& param_dest);
-template bool Bumper::parse_param<unsigned int>(const std::string& param_name, unsigned int& param_dest);
 //}
 //
 }  // namespace fog_bumper
