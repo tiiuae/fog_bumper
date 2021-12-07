@@ -9,6 +9,7 @@
 #include <sensor_msgs/msg/range.hpp>
 
 #include <tf2_ros/transform_listener.h>
+#include <tf2_ros/buffer.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
 #include <boost/circular_buffer.hpp>
@@ -160,7 +161,7 @@ Bumper::Bumper(rclcpp::NodeOptions options) : Node("Bumper", options) {
 
   if (!loaded_successfully) {
     const std::string str = "Could not load all non-optional parameters. Shutting down.";
-    RCLCPP_ERROR(this->get_logger(), str);
+    RCLCPP_ERROR(this->get_logger(), str.c_str());
     rclcpp::shutdown();
     return;
   }
@@ -173,7 +174,7 @@ Bumper::Bumper(rclcpp::NodeOptions options) : Node("Bumper", options) {
   m_lidar2d_msg.reset();
   m_lidar1d_down_msg.reset();
 
-  m_callback_group = this->create_callback_group(rclcpp::callback_group::CallbackGroupType::Reentrant);
+  m_callback_group = this->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
   auto sub_opt = rclcpp::SubscriptionOptions();
   sub_opt.callback_group = m_callback_group;
 
