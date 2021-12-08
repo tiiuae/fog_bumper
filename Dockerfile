@@ -1,11 +1,13 @@
 # fog-sw BUILDER
-FROM ros:foxy-ros-base as fog-sw-builder
+ARG ROS_DISTRO="galactic"
+FROM ros:${ROS_DISTRO}-ros-base as fog-sw-builder
 
 ARG UID=1000
 ARG GID=1000
 ARG BUILD_NUMBER
 ARG COMMIT_ID
 ARG GIT_VER
+ARG PACKAGE_NAME
 
 # Install build dependencies
 RUN apt-get update -y && apt-get install -y --no-install-recommends \
@@ -21,18 +23,20 @@ RUN groupadd -g $GID builder && \
     usermod -aG sudo builder && \
     echo 'builder ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 
-RUN mkdir -p /fog_bumper/packaging
+RUN echo "deb [trusted=yes] https://ssrc.jfrog.io/artifactory/ssrc-debian-public-remote focal fog-sw" >> /etc/apt/sources.list
 
-COPY packaging/rosdep.yaml packaging/rosdep.sh /fog_bumper/packaging/
-COPY underlay.repos /fog_bumper/
+RUN mkdir -p /$PACKAGE_NAME/packaging
 
-RUN /fog_bumper/packaging/rosdep.sh /fog_bumper
+COPY packaging/rosdep.yaml packaging/rosdep.sh /$PACKAGE_NAME/packaging/
+COPY underlay.repos package.xml /$PACKAGE_NAME/
 
-RUN chown -R builder:builder /fog_bumper
+RUN /$PACKAGE_NAME/packaging/rosdep.sh /$PACKAGE_NAME
+
+RUN chown -R builder:builder /$PACKAGE_NAME
 
 USER builder
 
-VOLUME /fog_bumper/sources
-WORKDIR /fog_bumper/sources
+VOLUME /$PACKAGE_NAME/sources
+WORKDIR /$PACKAGE_NAME/sources
 
 RUN rosdep update

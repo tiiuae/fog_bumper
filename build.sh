@@ -6,18 +6,22 @@ output_dir=$1
 
 build_number=${GITHUB_RUN_NUMBER:=0}
 
-iname=fog-bumper
+ros_distro=${ROS_DISTRO:=foxy}
+
+iname=fog_bumper
 
 docker build \
   --build-arg UID=$(id -u) \
   --build-arg GID=$(id -g) \
+  --build-arg ROS_DISTRO=${ros_distro} \
+  --build-arg PACKAGE_NAME=${iname} \
   --pull \
   -f Dockerfile -t "${iname}:latest" .
 
 docker run \
   --rm \
   -v $(pwd):/fog_bumper/sources \
-  fog-bumper:latest \
+  ${iname}:latest \
   ./packaging/package.sh \
   -b ${build_number}
 
