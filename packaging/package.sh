@@ -74,21 +74,23 @@ version=$(grep "<version>" package.xml | sed 's/[^>]*>\([^<"]*\).*/\1/')
 
 echo "[INFO] Version: ${version}."
 
-# Check if dependencies are satisfied, run build_deps if not
-if rosdep check --from-paths ${mod_dir} 1> /dev/null 2>&1; then
-    echo "[INFO] Dependencies are satisfied."
-else
-    echo "[INFO] System dependencies have not been satisfied."
-    echo "[INFO] Building dependencies using underlay.repos."
-    ${mod_dir}/packaging/build_deps.sh ${mod_dir}
-fi
+#title="$version ($(date +%Y-%m-%d))"
+#cat << EOF_CHANGELOG > CHANGELOG.rst
+#$title
+#$(printf '%*s' "${#title}" | tr ' ' "-")
+#* commit: ${git_commit_hash}
+#EOF_CHANGELOG
 
 if [ -e ${mod_dir}/ros2_ws ]; then
 	# From fog-sw repo.
 	source ${mod_dir}/ros2_ws/install/setup.bash
 fi
-if [ -e ${mod_dir}/deps_ws ]; then
-	source ${mod_dir}/deps_ws/install/setup.bash
+if [ -e ${mod_dir}/../deps_ws ]; then
+	source ${mod_dir}/../deps_ws/install/setup.bash
+fi
+
+if [ -e ${mod_dir}/debian ]; then
+	cp -r debian debian_bak
 fi
 
 bloom-generate rosdebian --os-name ubuntu --os-version focal --ros-distro ${ROS_DISTRO} --place-template-files \
@@ -96,14 +98,22 @@ bloom-generate rosdebian --os-name ubuntu --os-version focal --ros-distro ${ROS_
     && [ ! "$distr" = "" ] && sed -i "s/@(Distribution)/${distr}/" debian/changelog.em || : \
     && bloom-generate rosdebian --os-name ubuntu --os-version focal --ros-distro ${ROS_DISTRO} --process-template-files -i ${build_nbr}${git_version_string} \
     && sed -i 's/^\tdh_shlibdeps.*/& --dpkg-shlibdeps-params=--ignore-missing-info/g' debian/rules \
-	&& sed -i "s/\=\([0-9]*\.[0-9]*\.[0-9]*\*\)//g" debian/control \
+		&& sed -i "s/\=\([0-9]*\.[0-9]*\.[0-9]*\*\)//g" debian/control \
     && fakeroot debian/rules clean \
     && fakeroot debian/rules binary || exit 1
 
 echo "[INFO] Clean up."
-rm -rf deps_ws obj-x86_64-linux-gnu debian
+
+rm -rf obj-x86_64-linux-gnu debian
+
+if [ -e ${mod_dir}/debian_bak ]; then
+	cp -r debian_bak debian
+	rm -rf debian_bak
+fi
+
 
 echo "[INFO] Move debian packages to volume."
 mv ${mod_dir}/../*.deb ${mod_dir}/../*.ddeb ${mod_dir}
 
 echo "[INFO] Done."
+exit 0
