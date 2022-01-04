@@ -1,3 +1,2 @@
 fog_msgs:
-    ubuntu: ros-foxy-fog-msgs
-
+    ubuntu: ros-ROS_DISTRO-fog-msgs=0.0.8*

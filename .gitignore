@@ -1,3 +1,6 @@
+# Visual Studio Code files
+.vscode
+
 # local backup files
 *.BAK
 
@@ -45,3 +48,4 @@ build/
 *.mpg
 *.mpeg
 *.mp4
+
