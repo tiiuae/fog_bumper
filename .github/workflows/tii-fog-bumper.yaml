@@ -44,7 +44,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v3
         with:
-          images: ghcr.io/tiiuae/tii-fog-bumper
+          images: ghcr.io/tiiuae/tii-bumper
           tags: |
             type=ref,event=branch
             type=semver,pattern={{version}}
@@ -56,8 +56,8 @@ jobs:
         if: github.event_name == 'push'
         with:
           registry: ghcr.io
-          username: ${{ secrets.GCR_PACKAGES_USER }}
-          password: ${{ secrets.GCR_PACKAGES_TOKEN }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build tii-fog-bumper image and push
         uses: docker/build-push-action@v2
