@@ -16,7 +16,6 @@ FROM ghcr.io/tiiuae/fog-ros-baseimage:sha-d2cdcdb
 ENTRYPOINT /entrypoint.sh
 
 COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
 
 COPY --from=builder /main_ws/ros-*-fog-bumper_*_amd64.deb /fog-bumper.deb
 
